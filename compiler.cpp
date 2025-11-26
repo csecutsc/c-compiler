@@ -71,7 +71,7 @@ vector<Token> tokenize(string raw_stream){
             c = raw_stream[fileptr++];
           }
           retlist.push_back({TokenType::Identifier, identifier}); 
-          fileptr--;
+          fileptr--; // dec as we reach this only if last character is not alpha, and we still want to parse this
         }
         else if (isdigit(c)){
           string numericliteral = "";
@@ -105,7 +105,7 @@ int main(int argc, char* argv[]){
     // tokenize
     vector<Token> tokens = tokenize(full_string);
     for (int i = 0; i < tokens.size(); i++){
-      cout << tokens[i].lexeme << '\n';
+      cout << tokens[i].token_type << " " << tokens[i].lexeme << '\n';
     }
   }
   else{
