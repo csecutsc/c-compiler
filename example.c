@@ -1,4 +1,4 @@
-int main(){
-  int a = 20;
+fun main(){
+  a = 20;
   print(a);
 }
