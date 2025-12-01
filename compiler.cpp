@@ -73,10 +73,13 @@ std::vector<Token> tokenize(std::string raw_stream){
         retlist.push_back({TokenType::Slash, "/"}); 
         break;
       case '=':
-        retlist.push_back({TokenType::Slash, "="}); 
+        retlist.push_back({TokenType::Equal, "="}); 
         break;
       case '^':
         retlist.push_back({TokenType::Carrot, "^"}); 
+        break;
+      case ';':
+        retlist.push_back({TokenType::Semicolon, ";"}); 
         break;
       default:
         // check if identifier, if it is, consume all
@@ -120,10 +123,14 @@ class Expr{
 };
 
 class NumberExpr: public Expr{
-  double Val;
+  double val;
   llvm::Value *codegen(){
     //
   }
+  public:
+    NumberExpr(const double val){
+      this->val = val;
+    }
 };
 
 class VariableExpr : public Expr{
@@ -199,32 +206,110 @@ class FunctionExpr : public Expr{
 // -----------------------
 // Parser
 // ----------------------
-std::vector<Expr*> parse(std::vector<Token> tokens){
-  // no backtracking
-  vector<Expr*> ret_expressions;
-  int tokenindex = 0;
-  while (tokenindex < tokens.size()){
-    Token current_token = tokens[tokenindex];
+class Parser{
+  private:
+    std::vector<Token> tokens;
+    int token_index = 0;
+    Token current_token;
 
-    if(current_token.token_type == TokenType::Keyword && current_token.lexeme=="fun"){
-      FunctionExpr* expression = parseFunction(tokens, &tokenindex);
-      ret_expressions.push_back(expression);
+  public:
+    Parser(std::vector<Token> tokens){
+      this->tokens = tokens;
     }
-    else{
-      Expr* expression = parseExpression(tokens, &tokenindex);
-      ret_expressions.push_back(expression);
+    
+    void consume_token(){
+      token_index++;
+      current_token = tokens[token_index];
     }
-  }
-  return ret_expressions;
-}
 
-Expr* parseFunction(std::vector<Token> tokens, int* tokenindex){
-  //
-}
+    int get_current_token_precedence(){
+      switch(current_token.token_type){
+        case TokenType::Plus:
+          return 10;
+        case TokenType::Minus:
+          return 10;
+        case TokenType::Star:
+          return 20;
+        case TokenType::Slash:
+          return 20;
+        default:
+          return -1;
+      }
+    }
 
-Expr* parseExpression(std::vector<Token> tokens, int* tokenindex){
-  //
-}
+    std::vector<Expr*> parse(){
+      std::vector<Expr*> ret_expressions;
+      while (token_index < tokens.size()){
+        current_token = tokens[token_index];
+        if(current_token.token_type == TokenType::Keyword && current_token.lexeme=="fun"){
+          FunctionExpr* expression = parseFunction();
+          ret_expressions.push_back(expression);
+        }
+        else{
+          Expr* expression = parseExpression();
+          ret_expressions.push_back(expression);
+        }
+      }
+      return ret_expressions;
+    }
+
+    FunctionExpr* parseFunction(){
+    }
+  
+    Expr* parsePrimary(){
+      if (current_token.token_type == TokenType::Identifier){
+        if (tokens[token_index+1].token_type == TokenType::LParen){
+          // parse a call
+          std::string call_name = current_token.lexeme;
+          consume_token(); // eat the identifier
+          std::vector<Expr*> args;
+          consume_token(); // eat the '('
+          // create a list of arguments
+          while (current_token.token_type != TokenType::RParen){
+            args.push_back(parseExpression()); // parse the current thing here
+            consume_token(); // move forwards
+          }
+          return new CallExpr(call_name, args);
+        }
+        else{
+          // parse a variable
+          return new VariableExpr(current_token.lexeme);
+        }
+      }
+      else if (current_token.token_type == TokenType::NumericLiteral){
+        return new NumberExpr(std::stod(current_token.lexeme));
+      }
+      else if(current_token.token_type == TokenType::LParen)
+        // consume the token
+        consume_token(); // consume (
+        Expr* V = parseExpression();
+        consume_token(); // consume )
+        return V;
+    }
+     
+    Expr* parseBinary(int expr_precendence, Expr* LHS){
+      while (true) {
+        int token_precedence = get_current_token_precedence();
+        if (token_precedence < expr_precendence) return LHS;
+        consume_token();
+        auto RHS = parsePrimary();
+        int next_precedence = get_current_token_precedence();
+        if (token_precedence < next_precedence){
+          // then, the RHS is more precedence, parse that first
+          RHS = parseBinary(token_precedence+1, RHS);
+        }
+        LHS = new BinaryExpr(current_token.token_type, LHS, RHS);
+      }
+    }
+
+    Expr* parseExpression(){
+      auto LHS = parsePrimary();
+      consume_token(); // consume the next operation, either ; or a +
+      return parseBinary(0, LHS);
+    }
+};
+
+
 
 
 int main(int argc, char* argv[]){
@@ -244,7 +329,8 @@ int main(int argc, char* argv[]){
     // tokenize
     std::vector<Token> tokens = tokenize(full_string);
     // get expression nodes
-    std::vector<Expr*> expressions = parse(tokens);
+    Parser* parser = new Parser(tokens);
+    std::vector<Expr*> expressions = parser->parse();
 
     for (int i = 0; i < tokens.size(); i++){
       std::cout << tokens[i].token_type << " " << tokens[i].lexeme << '\n';
