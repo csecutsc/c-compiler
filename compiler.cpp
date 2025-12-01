@@ -120,6 +120,7 @@ class Expr{
   public:
     virtual ~Expr() = default;
     virtual llvm::Value *codegen() = 0;
+    virtual void debug() = 0;
 };
 
 class NumberExpr: public Expr{
@@ -131,6 +132,9 @@ class NumberExpr: public Expr{
     NumberExpr(const double val){
       this->val = val;
     }
+    void debug(){
+      std::cout << "NumberExpr: " << val << std::endl;
+    }
 };
 
 class VariableExpr : public Expr{
@@ -141,6 +145,10 @@ class VariableExpr : public Expr{
   public:
     VariableExpr(const std::string &name){
       this->name = name;
+    }
+
+    void debug(){
+      std::cout << "VariableExpr : " << name << std::endl;
     }
 };
 
@@ -157,6 +165,12 @@ class BinaryExpr : public Expr{
     llvm::Value *codegen(){
       //
     }
+
+    void debug(){
+      std::cout << "BinaryExpr : " << operation << std::endl;
+      LHS->debug();
+      RHS->debug();
+    }
 };
 
 class CallExpr : public Expr{
@@ -169,6 +183,9 @@ class CallExpr : public Expr{
     }
     llvm::Value *codegen(){
       //
+    }
+    void debug(){
+      std::cout << "CallExpr : " << callee << std::endl;
     }
 
 };
@@ -187,6 +204,9 @@ class ProtoExpr : public Expr{
     const std::string getName() {
       return this->name;
     }
+    void debug(){
+      std::cout << "ProtoExpr : " << name << std::endl;
+    }
 };
 
 class FunctionExpr : public Expr{
@@ -200,6 +220,11 @@ class FunctionExpr : public Expr{
     }
     llvm::Function *codegen(){
       //
+    }
+    void debug(){
+      std::cout << "FunctionExpr : " << std::endl;
+      proto->debug();
+      body->debug();
     }
 };
 
@@ -239,15 +264,20 @@ class Parser{
 
     std::vector<Expr*> parse(){
       std::vector<Expr*> ret_expressions;
-      while (token_index < tokens.size()){
+      while (token_index < tokens.size()-1){
         current_token = tokens[token_index];
         if(current_token.token_type == TokenType::Keyword && current_token.lexeme=="fun"){
           FunctionExpr* expression = parseFunction();
           ret_expressions.push_back(expression);
         }
+        else if(current_token.token_type == TokenType::Semicolon){
+          consume_token();
+        }
         else{
           Expr* expression = parseExpression();
+          std::cout << "Before push_back, size: " << ret_expressions.size() << std::endl;
           ret_expressions.push_back(expression);
+          std::cout << "After push_back, size: " << ret_expressions.size() << std::endl;
         }
       }
       return ret_expressions;
@@ -283,16 +313,17 @@ class Parser{
         // consume the token
         consume_token(); // consume (
         Expr* V = parseExpression();
-        consume_token(); // consume )
+        //consume_token(); // consume )
         return V;
     }
      
-    Expr* parseBinary(int expr_precendence, Expr* LHS){
+    Expr* parseBinary(int expr_precedence, Expr* LHS){
       while (true) {
         int token_precedence = get_current_token_precedence();
-        if (token_precedence < expr_precendence) return LHS;
-        consume_token();
-        auto RHS = parsePrimary();
+        if (token_precedence < expr_precedence) return LHS;
+        consume_token(); // consume the operation
+        Expr* RHS = parsePrimary();
+        consume_token(); // get next operation or ;
         int next_precedence = get_current_token_precedence();
         if (token_precedence < next_precedence){
           // then, the RHS is more precedence, parse that first
@@ -303,7 +334,7 @@ class Parser{
     }
 
     Expr* parseExpression(){
-      auto LHS = parsePrimary();
+      Expr* LHS = parsePrimary();
       consume_token(); // consume the next operation, either ; or a +
       return parseBinary(0, LHS);
     }
