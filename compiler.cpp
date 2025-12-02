@@ -152,12 +152,14 @@ class VariableExpr : public Expr{
     VariableExpr(const std::string &name){
       this->name = name;
     }
-
     void debug(){
       std::cout << "VariableExpr : " << name << std::endl;
     }
     llvm::Value *codegen(){
       return VariablesMap[name];
+    }
+    std::string get_name(){
+      return this->name;
     }
 };
 
@@ -183,8 +185,13 @@ class BinaryExpr : public Expr{
       else if(operation.lexeme == "*"){
           return Builder->CreateMul(L, R, "mulreg");
       }
-      else if(operation.lexeme == "."){
+      else if(operation.lexeme == "/"){
           return Builder->CreateExactUDiv(L, R, "divreg");
+      }
+      else if(operation.lexeme == "="){
+          VariableExpr* IdentLHS = (VariableExpr*)LHS;
+          VariablesMap[IdentLHS->get_name()] = R;
+          return Builder->CreateAdd(R, Builder->getInt64(0), IdentLHS->get_name());
       }
       else{
         return nullptr;
@@ -299,10 +306,14 @@ class Parser{
           return 20;
         case TokenType::Slash:
           return 20;
+        case TokenType::Equal:
+          return 20;
         default:
           return -1;
       }
     }
+
+
 
     std::vector<Expr*> parse(){
       std::vector<Expr*> ret_expressions;
@@ -369,15 +380,6 @@ class Parser{
             //consume_token(); // move forwards
           }
           return new CallExpr(call_name, args);
-        }
-        else if (tokens[token_index+1].token_type == TokenType::Equal){
-          // parse a assignment
-          std::string var_name = current_token.lexeme;
-          consume_token(); // eat the identifier
-          consume_token(); // eat the '='
-          Expr* Val = parseExpression();
-          VariablesMap[var_name] = Val->codegen();
-          return nullptr;
         }
         else{
           // parse a variable
