@@ -5,7 +5,7 @@ c-like language with:
 
 # Compilation Command
 ```
-clang++ -g compiler.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` -O3 -o compiler
+clang++ -g compiler.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` -o compiler
 ```
 
 # Bugs
