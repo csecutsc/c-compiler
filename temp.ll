@@ -1,21 +1,40 @@
-; ModuleID = 'module_name'
-source_filename = "module_name"
-
 declare i32 @printf(i8*, ...)
-@.str = private unnamed_addr constant [4 x i8] c"%f\0A\00", align 1
-
-define double @test(double %x) {
+@.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+define i64 @myfunadd(i64 %a, i64 %b) {
 entry:
-  %addtmp = fadd double 3.000000e+00, %x
-  ret double %addtmp
+  %addreg = add i64 %a, %b
+  ret i64 %addreg
 }
 
+define i64 @myfunsub(i64 %a, i64 %b) {
+entry:
+  %subreg = sub i64 %a, %b
+  ret i64 %subreg
+}
 
-define i32 @main() #0 {
-  %calltmp = call double @test(double 1.500000e+00)
+define i64 @myfunmul(i64 %a, i64 %b) {
+entry:
+  %mulreg = mul i64 %a, %b
+  ret i64 %mulreg
+}
 
-  %fmt_ptr = getelementptr inbounds [6 x i8], [6 x i8]* @.str, i32 0, i32 0
-  %result = call i32 (i8*, ...) @printf(i8* %fmt_ptr, double %calltmp)
-  ret i32 0 
+define i64 @myfundiv(i64 %a, i64 %b) {
+entry:
+  %divreg = udiv exact i64 %a, %b
+  ret i64 %divreg
+}
+
+define i64 @main() {
+entry:
+  %callreg = call i64 @myfunadd(i64 3, i64 2)
+  %a = add i64 %callreg, 0
+  %callreg1 = call i64 @myfunsub(i64 3, i64 2)
+  %b = add i64 %callreg1, 0
+  %callreg2 = call i64 @myfunmul(i64 3, i64 2)
+  %c = add i64 %callreg2, 0
+  %callreg3 = call i64 @myfundiv(i64 4, i64 2)
+  %d = add i64 %callreg3, 0
+  %callreg4 = call i32 (ptr, ...) @printf(ptr @.str, i64 %callreg3)
+  ret i64 0
 }
 
