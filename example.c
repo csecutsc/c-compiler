@@ -4,6 +4,7 @@ fun myfun(a, b){
 
 fun main(){
   a = 20;
-  print(a);
+  printf(a);
+  0;
 }
 

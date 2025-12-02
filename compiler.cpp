@@ -142,7 +142,8 @@ class NumberExpr: public Expr{
       std::cout << "NumberExpr: " << val << std::endl;
     }
     llvm::Value *codegen(){
-      return llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
+      return Builder->getInt64(val);
+      //return llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
     }
 };
 
@@ -216,6 +217,32 @@ class CallExpr : public Expr{
     llvm::Value *codegen(){
       llvm::Function *CalleeF = TheModule->getFunction(callee);
       std::vector<llvm::Value*> args_values;
+      if (callee == "printf"){
+        llvm::Constant *formatStr = llvm::ConstantDataArray::getString(
+          TheModule->getContext(), 
+          "%f\n",  // or whatever format you need
+          true     // AddNull
+        );
+        
+        llvm::GlobalVariable *formatStrVar = new llvm::GlobalVariable(
+          *TheModule,
+          formatStr->getType(),
+          true,  // isConstant
+          llvm::GlobalValue::PrivateLinkage,
+          formatStr,
+          ".str"
+        );
+        
+        // Create GEP to get pointer to the string
+        llvm::Value *zero = Builder->getInt32(0);
+        llvm::Value *fmtPtr = Builder->CreateInBoundsGEP(
+          formatStr->getType(),
+          formatStrVar,
+          {zero, zero},
+          "fmt_ptr"
+        );
+        args_values.push_back(fmtPtr);
+      }
       for (int i = 0; i < args.size(); i++){
         args_values.push_back(args[i]->codegen());
       }
@@ -259,9 +286,11 @@ class FunctionExpr : public Expr{
       llvm::BasicBlock *BB = llvm::BasicBlock::Create(*TheContext, "entry", F);
       Builder->SetInsertPoint(BB);
 
-      for (int i = 0; i < body.size(); i++){
+      for (int i = 0; i < body.size()-1; i++){
         body[i]->codegen();
       }
+
+      Builder->CreateRet(body[body.size()-1]->codegen());
       return F;
     }
 
@@ -434,7 +463,7 @@ int main(int argc, char* argv[]){
     while (getline(file, line)) {
       full_string += line;
     }
-    std::cout << full_string << std::endl;
+    //std::cout << full_string << std::endl;
 
     // tokenize
     std::vector<Token> tokens = tokenize(full_string);
@@ -445,12 +474,24 @@ int main(int argc, char* argv[]){
     // get expression nodes
     Parser* parser = new Parser(tokens);
     std::vector<Expr*> expressions = parser->parse();
-  
+    
+
+    // preamble linker
+    llvm::FunctionType *printfType = llvm::FunctionType::get(
+      Builder->getInt32Ty(),
+      {llvm::PointerType::getUnqual(Builder->getContext())},
+      true  // isVarArg
+    );
+    llvm::FunctionCallee printfFunc = TheModule->getOrInsertFunction("printf", printfType);
+
+    std::cout << "declare i32 @printf(i8*, ...)" << std::endl;
+    std::cout << "@.str = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\", align 1" << std::endl;
+    
     // codegen for all expressions
     for (int i = 0; i < expressions.size(); i++){
       llvm::Value* fv = expressions[i]->codegen();
       fv->print(llvm::errs());
-      std::cout << "---" << std::endl;
+      fprintf(stderr, "\n");
     }
 
     //for (int i = 0; i < expressions.size(); i++){

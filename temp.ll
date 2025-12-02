@@ -12,9 +12,9 @@ entry:
 
 
 define i32 @main() #0 {
-  %fmt_ptr = getelementptr inbounds [6 x i8], [6 x i8]* @.str, i32 0, i32 0
   %calltmp = call double @test(double 1.500000e+00)
 
+  %fmt_ptr = getelementptr inbounds [6 x i8], [6 x i8]* @.str, i32 0, i32 0
   %result = call i32 (i8*, ...) @printf(i8* %fmt_ptr, double %calltmp)
   ret i32 0 
 }

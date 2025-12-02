@@ -1,5 +1,7 @@
 # c-compiler
-c-like language
+c-like language with:
+- built-in function printf
+- implicit returns
 
 # Compilation Command
 ```
