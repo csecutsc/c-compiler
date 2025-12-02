@@ -11,9 +11,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
-
-
-
+#include "llvm/IR/Module.h"
 
 // -----------------------
 // Tokenizer
@@ -116,6 +114,15 @@ std::vector<Token> tokenize(std::string raw_stream){
 }
 
 // -----------------------
+// Global LLVM Constructs
+// ----------------------
+
+static llvm::LLVMContext* TheContext = new llvm::LLVMContext();
+static llvm::Module* TheModule = new llvm::Module("AwesomeCompiler", *TheContext);
+static llvm::IRBuilder<>* Builder = new llvm::IRBuilder<>(*TheContext);
+static std::map<std::string, llvm::Value*> VariablesMap;
+
+// -----------------------
 // AST NODES DEFINITIONS
 // ----------------------
 class Expr{
@@ -127,9 +134,6 @@ class Expr{
 
 class NumberExpr: public Expr{
   double val;
-  llvm::Value *codegen(){
-    //
-  }
   public:
     NumberExpr(const double val){
       this->val = val;
@@ -137,13 +141,13 @@ class NumberExpr: public Expr{
     void debug(){
       std::cout << "NumberExpr: " << val << std::endl;
     }
+    llvm::Value *codegen(){
+      return llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
+    }
 };
 
 class VariableExpr : public Expr{
   std::string name;
-  llvm::Value *codegen(){
-    //
-  }
   public:
     VariableExpr(const std::string &name){
       this->name = name;
@@ -151,6 +155,9 @@ class VariableExpr : public Expr{
 
     void debug(){
       std::cout << "VariableExpr : " << name << std::endl;
+    }
+    llvm::Value *codegen(){
+      return VariablesMap[name];
     }
 };
 
@@ -165,7 +172,23 @@ class BinaryExpr : public Expr{
       this->RHS = RHS;
     }
     llvm::Value *codegen(){
-      //
+      llvm::Value *L = LHS->codegen();
+      llvm::Value *R = RHS->codegen();
+      if (operation.lexeme == "+"){
+          return Builder->CreateAdd(L, R, "addreg");
+      }
+      else if(operation.lexeme == "-"){
+          return Builder->CreateSub(L, R, "subreg");
+      }
+      else if(operation.lexeme == "*"){
+          return Builder->CreateMul(L, R, "mulreg");
+      }
+      else if(operation.lexeme == "."){
+          return Builder->CreateExactUDiv(L, R, "divreg");
+      }
+      else{
+        return nullptr;
+      }
     }
 
     void debug(){
@@ -184,7 +207,12 @@ class CallExpr : public Expr{
       this->args = args;
     }
     llvm::Value *codegen(){
-      //
+      llvm::Function *CalleeF = TheModule->getFunction(callee);
+      std::vector<llvm::Value*> args_values;
+      for (int i = 0; i < args.size(); i++){
+        args_values.push_back(args[i]->codegen());
+      }
+      return Builder->CreateCall(CalleeF, args_values, "callreg");
     }
     void debug(){
       std::cout << "CallExpr : " << callee << std::endl;
@@ -209,8 +237,27 @@ class FunctionExpr : public Expr{
       this->body = body;
     }
     llvm::Function *codegen(){
-      //
+      std::vector<llvm::Type*> Integers(args.size(), llvm::Type::getInt64Ty(*TheContext));
+      llvm::FunctionType *FT = llvm::FunctionType::get(llvm::Type::getInt64Ty(*TheContext), Integers, false);
+      llvm::Function *F = llvm::Function::Create(FT, llvm::Function::ExternalLinkage, name, TheModule);
+
+      //VariablesMap.clear();
+      int i = 0;
+      for (auto &arg : F->args()){
+        arg.setName(args[i]); // set function arguments
+        VariablesMap[args[i]] = &arg; // set this address into the mapping
+        i++;
+      }
+
+      llvm::BasicBlock *BB = llvm::BasicBlock::Create(*TheContext, "entry", F);
+      Builder->SetInsertPoint(BB);
+
+      for (int i = 0; i < body.size(); i++){
+        body[i]->codegen();
+      }
+      return F;
     }
+
     void debug(){
       std::cout << "FunctionExpr : " << std::endl;
       for (int i = 0; i < args.size(); i++){
@@ -252,8 +299,6 @@ class Parser{
           return 20;
         case TokenType::Slash:
           return 20;
-        case TokenType::Equal:
-          return 30;
         default:
           return -1;
       }
@@ -272,7 +317,9 @@ class Parser{
         }
         else{
           Expr* expression = parseExpression();
-          ret_expressions.push_back(expression);
+          if (expression != nullptr){
+            ret_expressions.push_back(expression);
+          }
         }
       }
       return ret_expressions;
@@ -298,7 +345,10 @@ class Parser{
           consume_token();
         } 
         else{
-          expressions.push_back(parseExpression());
+          Expr* V = parseExpression();
+          if (V != nullptr){
+            expressions.push_back(V);
+          }
         }
       }
       consume_token(); // consume '}'
@@ -319,6 +369,15 @@ class Parser{
             //consume_token(); // move forwards
           }
           return new CallExpr(call_name, args);
+        }
+        else if (tokens[token_index+1].token_type == TokenType::Equal){
+          // parse a assignment
+          std::string var_name = current_token.lexeme;
+          consume_token(); // eat the identifier
+          consume_token(); // eat the '='
+          Expr* Val = parseExpression();
+          VariablesMap[var_name] = Val->codegen();
+          return nullptr;
         }
         else{
           // parse a variable
@@ -384,12 +443,18 @@ int main(int argc, char* argv[]){
     // get expression nodes
     Parser* parser = new Parser(tokens);
     std::vector<Expr*> expressions = parser->parse();
-
-
+  
+    // codegen for all expressions
     for (int i = 0; i < expressions.size(); i++){
-      expressions[i]->debug();
+      llvm::Value* fv = expressions[i]->codegen();
+      fv->print(llvm::errs());
       std::cout << "---" << std::endl;
     }
+
+    //for (int i = 0; i < expressions.size(); i++){
+    //  expressions[i]->debug();
+    //  std::cout << "---" << std::endl;
+    //}
 
   }
   else{
