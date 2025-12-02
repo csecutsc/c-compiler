@@ -186,6 +186,11 @@ class CallExpr : public Expr{
     }
     void debug(){
       std::cout << "CallExpr : " << callee << std::endl;
+      std::cout << "arguments: " << std::endl;
+      for (int i = 0; i < args.size(); i++){
+        std::cout << "\t ";
+        args[i]->debug();
+      }
     }
 
 };
@@ -275,9 +280,7 @@ class Parser{
         }
         else{
           Expr* expression = parseExpression();
-          std::cout << "Before push_back, size: " << ret_expressions.size() << std::endl;
           ret_expressions.push_back(expression);
-          std::cout << "After push_back, size: " << ret_expressions.size() << std::endl;
         }
       }
       return ret_expressions;
@@ -297,7 +300,7 @@ class Parser{
           // create a list of arguments
           while (current_token.token_type != TokenType::RParen){
             args.push_back(parseExpression()); // parse the current thing here
-            consume_token(); // move forwards
+            //consume_token(); // move forwards
           }
           return new CallExpr(call_name, args);
         }
@@ -359,13 +362,20 @@ int main(int argc, char* argv[]){
 
     // tokenize
     std::vector<Token> tokens = tokenize(full_string);
+    //for (int i = 0; i < tokens.size(); i++){
+    //  std::cout << tokens[i].token_type << " " << tokens[i].lexeme << '\n';
+    //}
+
     // get expression nodes
     Parser* parser = new Parser(tokens);
     std::vector<Expr*> expressions = parser->parse();
 
-    for (int i = 0; i < tokens.size(); i++){
-      std::cout << tokens[i].token_type << " " << tokens[i].lexeme << '\n';
+
+    for (int i = 0; i < expressions.size(); i++){
+      expressions[i]->debug();
+      std::cout << "---" << std::endl;
     }
+
   }
   else{
     std::cout << "usage: ./compiler <filename>";
