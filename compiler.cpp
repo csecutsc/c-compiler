@@ -20,6 +20,7 @@
 // ----------------------
 
 enum TokenType {
+  END = 0,
   Semicolon = 1,
   LParen = 2,
   RParen = 3,
@@ -110,6 +111,7 @@ std::vector<Token> tokenize(std::string raw_stream){
         break;
     }
   }
+  retlist.push_back({TokenType::END, ""}); 
   return retlist;
 }
 
@@ -153,11 +155,11 @@ class VariableExpr : public Expr{
 };
 
 class BinaryExpr : public Expr{
-  TokenType operation;
+  Token operation;
   Expr* LHS;
   Expr* RHS;
   public:
-    BinaryExpr(TokenType operation, Expr *LHS, Expr* RHS){
+    BinaryExpr(Token operation, Expr *LHS, Expr* RHS){
       this->operation = operation;
       this->LHS = LHS;
       this->RHS = RHS;
@@ -167,7 +169,7 @@ class BinaryExpr : public Expr{
     }
 
     void debug(){
-      std::cout << "BinaryExpr : " << operation << std::endl;
+      std::cout << "BinaryExpr : " << operation.lexeme << std::endl;
       LHS->debug();
       RHS->debug();
     }
@@ -195,32 +197,15 @@ class CallExpr : public Expr{
 
 };
 
-class ProtoExpr : public Expr{
+class FunctionExpr : public Expr{
   std::string name;
   std::vector<std::string> args;
-  public:
-    ProtoExpr(const std::string &name, std::vector<std::string> args){
-      this->name = name;
-      this->args = args;
-    }
-    llvm::Function *codegen(){
-      //
-    }
-    const std::string getName() {
-      return this->name;
-    }
-    void debug(){
-      std::cout << "ProtoExpr : " << name << std::endl;
-    }
-};
-
-class FunctionExpr : public Expr{
-  ProtoExpr* proto;
-  Expr* body;
+  std::vector<Expr*> body;
   
   public:
-    FunctionExpr(ProtoExpr* proto, Expr* body){
-      this->proto = proto;
+    FunctionExpr(std::string name, std::vector<std::string> args, std::vector<Expr*> body){
+      this->name = name;
+      this->args = args;
       this->body = body;
     }
     llvm::Function *codegen(){
@@ -228,8 +213,13 @@ class FunctionExpr : public Expr{
     }
     void debug(){
       std::cout << "FunctionExpr : " << std::endl;
-      proto->debug();
-      body->debug();
+      for (int i = 0; i < args.size(); i++){
+        std::cout << "\t " << args[i] << std::endl;
+      }
+      for (int i = 0; i < body.size(); i++){
+        std::cout  << "\t ";
+        body[i]->debug();
+      }
     }
 };
 
@@ -262,6 +252,8 @@ class Parser{
           return 20;
         case TokenType::Slash:
           return 20;
+        case TokenType::Equal:
+          return 30;
         default:
           return -1;
       }
@@ -287,6 +279,30 @@ class Parser{
     }
 
     FunctionExpr* parseFunction(){
+      consume_token(); // consume the 'func' Keyword
+      std::string function_name = current_token.lexeme;
+      std::vector<std::string> args;
+      std::vector<Expr*> expressions;
+      // get arguments
+      consume_token(); // consume the name
+      consume_token(); // consume '('
+      while (current_token.token_type != TokenType::RParen){
+        args.push_back(current_token.lexeme);
+        consume_token();
+      }
+      // get the expressions in the body
+      consume_token(); // consume ')'
+      consume_token(); // consume '{'
+      while (current_token.token_type != TokenType::RCurlyParen){
+        if (current_token.token_type == TokenType::Semicolon){
+          consume_token();
+        } 
+        else{
+          expressions.push_back(parseExpression());
+        }
+      }
+      consume_token(); // consume '}'
+      return new FunctionExpr(function_name, args, expressions);
     }
   
     Expr* parsePrimary(){
@@ -322,6 +338,7 @@ class Parser{
      
     Expr* parseBinary(int expr_precedence, Expr* LHS){
       while (true) {
+        Token op_token = current_token;
         int token_precedence = get_current_token_precedence();
         if (token_precedence < expr_precedence) return LHS;
         consume_token(); // consume the operation
@@ -332,7 +349,7 @@ class Parser{
           // then, the RHS is more precedence, parse that first
           RHS = parseBinary(token_precedence+1, RHS);
         }
-        LHS = new BinaryExpr(current_token.token_type, LHS, RHS);
+        LHS = new BinaryExpr(op_token, LHS, RHS);
       }
     }
 
@@ -342,8 +359,6 @@ class Parser{
       return parseBinary(0, LHS);
     }
 };
-
-
 
 
 int main(int argc, char* argv[]){
